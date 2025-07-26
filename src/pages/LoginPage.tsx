@@ -13,21 +13,29 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   const [error, setError] = useState('');
 
   const handleLogin = () => {
-    const success = dbService.loginUser(username.trim(), password);
-    if (success) {
-      onLoginSuccess();
-    } else {
-      setError('Invalid username or password.');
-    }
+    dbService.loginUser(username.trim(), password).then((success) => {
+      if (success) {
+        onLoginSuccess();
+      } else {
+        setError('Invalid username or password.');
+      }
+    }).catch((error) => {
+      console.error('Login error:', error);
+      setError('Login failed. Please try again.');
+    });
   };
 
   const handleRegister = () => {
-    const success = dbService.registerUser(username.trim(), password);
-    if (success) {
-      onLoginSuccess();
-    } else {
-      setError('Username already exists.');
-    }
+    dbService.registerUser(username.trim(), password).then((success) => {
+      if (success) {
+        onLoginSuccess();
+      } else {
+        setError('Username already exists.');
+      }
+    }).catch((error) => {
+      console.error('Registration error:', error);
+      setError('Registration failed. Please try again.');
+    });
   };
 
   return (

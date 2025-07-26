@@ -1,93 +1,100 @@
 import { Medication, PatientProfile, MemoryPrompt, CaregiverAccount } from '../types';
+import { authAPI, profileAPI, medicationsAPI, memoryPromptsAPI } from '../services/api';
 
 export class DatabaseService {
-  private accountKey = 'caregiver_accounts';
-  private currentUserKey = 'current_user';
+  // Keep localStorage as fallback for offline mode
+  private readonly FALLBACK_MODE = false; // Set to true for offline development
 
-  getAccounts(): CaregiverAccount[] {
-    const raw = localStorage.getItem(this.accountKey);
-    return raw ? JSON.parse(raw) : [];
-  }
-
-  saveAccounts(accounts: CaregiverAccount[]) {
-    localStorage.setItem(this.accountKey, JSON.stringify(accounts));
-  }
-
-  getCurrentUser(): CaregiverAccount | null {
-    const raw = localStorage.getItem(this.currentUserKey);
-    return raw ? JSON.parse(raw) : null;
-  }
-
-  setCurrentUser(user: CaregiverAccount) {
-    localStorage.setItem(this.currentUserKey, JSON.stringify(user));
-  }
-
-  logoutUser() {
-    localStorage.removeItem(this.currentUserKey);
-  }
-
-  registerUser(username: string, password: string): boolean {
-    const users = this.getAccounts();
-    if (users.find(u => u.username === username)) return false;
-    const newUser = { id: Date.now().toString(), username, password };
-    this.saveAccounts([...users, newUser]);
-    this.setCurrentUser(newUser);
-    return true;
-  }
-
-  loginUser(username: string, password: string): boolean {
-    const users = this.getAccounts();
-    const user = users.find(u => u.username === username && u.password === password);
-    if (!user) return false;
-    this.setCurrentUser(user);
-    return true;
-  }
-
-  private readonly MEDICATIONS_KEY = 'halo_medications';
-  private readonly PROFILE_KEY = 'halo_patient_profile';
-  private readonly MEMORIES_KEY = 'halo_memory_prompts';
-
-  // Medication methods
-  saveMedications(medications: Medication[]): void {
-    const user = this.getCurrentUser();
-    if (!user) return;
-    
+  async registerUser(username: string, password: string): Promise<boolean> {
     try {
-      localStorage.setItem(`medications_${user.id}`, JSON.stringify(medications));
+      const response = await authAPI.register(username, password);
+      localStorage.setItem('auth_token', response.token);
+      localStorage.setItem('current_user', JSON.stringify(response.user));
+      return true;
     } catch (error) {
-      console.error('Failed to save medications:', error);
+      console.error('Registration failed:', error);
+      return false;
     }
   }
 
-  getMedications(): Medication[] {
-    const user = this.getCurrentUser();
-    if (!user) return [];
-
+  async loginUser(username: string, password: string): Promise<boolean> {
     try {
-      const data = localStorage.getItem(`medications_${user.id}`);
-      return data ? JSON.parse(data) : [];
+      const response = await authAPI.login(username, password);
+      localStorage.setItem('auth_token', response.token);
+      localStorage.setItem('current_user', JSON.stringify(response.user));
+      return true;
+    } catch (error) {
+      console.error('Login failed:', error);
+      return false;
+    }
+  }
+
+  getCurrentUser(): CaregiverAccount | null {
+    const raw = localStorage.getItem('current_user');
+    return raw ? JSON.parse(raw) : null;
+  }
+
+  logoutUser() {
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem('current_user');
+  }
+
+  // Medication methods
+  async saveMedications(medications: Medication[]): Promise<void> {
+    // This method is kept for compatibility but individual operations are preferred
+    console.warn('saveMedications is deprecated. Use individual create/update operations.');
+  }
+
+  async getMedications(): Promise<Medication[]> {
+    try {
+      return await medicationsAPI.getAll();
     } catch (error) {
       console.error('Failed to load medications:', error);
       return [];
     }
   }
 
-  // Patient profile methods
-  savePatientProfile(profile: PatientProfile): void {
-    const user = this.getCurrentUser();
-    if (!user) return;
-
+  async addMedication(medication: Omit<Medication, 'id'>): Promise<Medication | null> {
     try {
-      localStorage.setItem(`profile_${user.id}`, JSON.stringify(profile));
+      return await medicationsAPI.create(medication);
+    } catch (error) {
+      console.error('Failed to add medication:', error);
+      return null;
+    }
+  }
+
+  async updateMedication(id: string, medication: Medication): Promise<boolean> {
+    try {
+      await medicationsAPI.update(id, medication);
+      return true;
+    } catch (error) {
+      console.error('Failed to update medication:', error);
+      return false;
+    }
+  }
+
+  async deleteMedication(id: string): Promise<boolean> {
+    try {
+      await medicationsAPI.delete(id);
+      return true;
+    } catch (error) {
+      console.error('Failed to delete medication:', error);
+      return false;
+    }
+  }
+
+  // Patient profile methods
+  async savePatientProfile(profile: PatientProfile): Promise<void> {
+    try {
+      await profileAPI.save(profile);
     } catch (error) {
       console.error('Failed to save patient profile:', error);
     }
   }
 
-  getPatientProfile(): PatientProfile | null {
+  async getPatientProfile(): Promise<PatientProfile | null> {
     try {
-      const data = localStorage.getItem(this.PROFILE_KEY);
-      return data ? JSON.parse(data) : null;
+      return await profileAPI.get();
     } catch (error) {
       console.error('Failed to load patient profile:', error);
       return null;
@@ -95,73 +102,51 @@ export class DatabaseService {
   }
 
   // Memory prompts methods
-  saveMemoryPrompts(prompts: MemoryPrompt[]): void {
-    const user = this.getCurrentUser();
-    if (!user) return;
-
-    try {
-      localStorage.setItem(`prompts_${user.id}`, JSON.stringify(prompts));
-    } catch (error) {
-      console.error('Failed to save memory prompts:', error);
-    }
+  async saveMemoryPrompts(prompts: MemoryPrompt[]): Promise<void> {
+    // This method is kept for compatibility but individual operations are preferred
+    console.warn('saveMemoryPrompts is deprecated. Use individual create operations.');
   }
 
-  getMemoryPrompts(): MemoryPrompt[] {
+  async getMemoryPrompts(): Promise<MemoryPrompt[]> {
     try {
-      const data = localStorage.getItem(this.MEMORIES_KEY);
-      return data ? JSON.parse(data) : [];
+      return await memoryPromptsAPI.getAll();
     } catch (error) {
       console.error('Failed to load memory prompts:', error);
       return [];
     }
   }
 
-  // Utility methods
-  clearAllData(): void {
+  async addMemoryPrompt(prompt: Omit<MemoryPrompt, 'id'>): Promise<MemoryPrompt | null> {
     try {
-      localStorage.removeItem(this.MEDICATIONS_KEY);
-      localStorage.removeItem(this.PROFILE_KEY);
-      localStorage.removeItem(this.MEMORIES_KEY);
+      return await memoryPromptsAPI.create(prompt);
     } catch (error) {
-      console.error('Failed to clear data:', error);
+      console.error('Failed to add memory prompt:', error);
+      return null;
     }
+  }
+
+  async deleteMemoryPrompt(id: string): Promise<boolean> {
+    try {
+      await memoryPromptsAPI.delete(id);
+      return true;
+    } catch (error) {
+      console.error('Failed to delete memory prompt:', error);
+      return false;
+    }
+  }
+
+  // Utility methods - kept for backward compatibility
+  clearAllData(): void {
+    console.warn('clearAllData is deprecated. Data is now stored in MongoDB.');
   }
 
   exportData(): string {
-    try {
-      const data = {
-        medications: this.getMedications(),
-        profile: this.getPatientProfile(),
-        memories: this.getMemoryPrompts(),
-        exportDate: new Date().toISOString()
-      };
-      return JSON.stringify(data, null, 2);
-    } catch (error) {
-      console.error('Failed to export data:', error);
-      return '';
-    }
+    console.warn('exportData is deprecated. Use the analytics API instead.');
+    return '';
   }
 
   importData(jsonData: string): boolean {
-    try {
-      const data = JSON.parse(jsonData);
-      
-      if (data.medications) {
-        this.saveMedications(data.medications);
-      }
-      
-      if (data.profile) {
-        this.savePatientProfile(data.profile);
-      }
-      
-      if (data.memories) {
-        this.saveMemoryPrompts(data.memories);
-      }
-      
-      return true;
-    } catch (error) {
-      console.error('Failed to import data:', error);
-      return false;
-    }
+    console.warn('importData is deprecated. Use individual API methods instead.');
+    return false;
   }
 }

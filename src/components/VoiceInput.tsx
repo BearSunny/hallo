@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Mic, MicOff } from 'lucide-react';
+import { geminiAI } from '../services/geminiAI';
 
 interface VoiceInputProps {
   onVoiceInput: (transcript: string, audioBlob: Blob) => void;
@@ -19,51 +20,18 @@ const VoiceInput: React.FC<VoiceInputProps> = ({
   const [transcript, setTranscript] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [audioLevel, setAudioLevel] = useState(0);
+  const [isUsingGeminiSTT, setIsUsingGeminiSTT] = useState(false);
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animationFrameRef = useRef<number>();
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const stopListeningRef = useRef<(() => void) | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
 
   useEffect(() => {
-    // Initialize Speech Recognition
-    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      recognitionRef.current = new SpeechRecognition();
-      
-      if (recognitionRef.current) {
-        recognitionRef.current.continuous = true;
-        recognitionRef.current.interimResults = true;
-        recognitionRef.current.lang = 'en-US';
-
-        recognitionRef.current.onresult = (event) => {
-          let finalTranscript = '';
-
-          for (let i = event.resultIndex; i < event.results.length; i++) {
-            const transcript = event.results[i][0].transcript;
-            if (event.results[i].isFinal) {
-              finalTranscript += transcript;
-            }
-          }
-
-          if (finalTranscript) {
-            setTranscript(finalTranscript);
-          }
-        };
-
-        recognitionRef.current.onerror = (event) => {
-          console.error('Speech recognition error:', event.error);
-        };
-
-        recognitionRef.current.onend = () => {
-          if (isListening) {
-            recognitionRef.current?.start();
-          }
-        };
-      }
-    }
+    // Check if Gemini STT is available (this would be implemented when API key is available)
+    setIsUsingGeminiSTT(false); // Set to true when Gemini STT is implemented
 
     return () => {
       if (animationFrameRef.current) {
@@ -107,9 +75,24 @@ const VoiceInput: React.FC<VoiceInputProps> = ({
       setIsRecording(true);
       setTranscript('');
       
-      // Start speech recognition
-      if (recognitionRef.current) {
-        recognitionRef.current.start();
+      // Start speech recognition using Gemini AI service
+      if (isUsingGeminiSTT) {
+        // Use Gemini STT when available
+        stopListeningRef.current = geminiAI.startListening(
+          (transcript, isFinal) => {
+            if (isFinal) {
+              setTranscript(transcript);
+            }
+          },
+          (error) => {
+            console.error('Gemini STT error:', error);
+            // Fallback to Web Speech API
+            startWebSpeechRecognition();
+          }
+        );
+      } else {
+        // Use Web Speech API as fallback
+        startWebSpeechRecognition();
       }
       
       onStartListening();
@@ -121,14 +104,51 @@ const VoiceInput: React.FC<VoiceInputProps> = ({
     }
   };
 
+  const startWebSpeechRecognition = () => {
+    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      const recognition = new SpeechRecognition();
+      
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = 'en-US';
+
+      recognition.onresult = (event) => {
+        let finalTranscript = '';
+
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            finalTranscript += transcript;
+          }
+        }
+
+        if (finalTranscript) {
+          setTranscript(finalTranscript);
+        }
+      };
+
+      recognition.onerror = (event) => {
+        console.error('Speech recognition error:', event.error);
+      };
+
+      recognition.start();
+      
+      stopListeningRef.current = () => {
+        recognition.stop();
+      };
+    }
+  };
+
   const stopRecording = () => {
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
       setAudioLevel(0);
       
-      if (recognitionRef.current) {
-        recognitionRef.current.stop();
+      if (stopListeningRef.current) {
+        stopListeningRef.current();
+        stopListeningRef.current = null;
       }
       
       if (animationFrameRef.current) {

@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { ArrowLeft, Edit2, Trash2, Clock, Pill, User, Heart, Save, X, Volume2, Play } from 'lucide-react';
 import { Medication, PatientProfile, MemoryPrompt } from '../types';
-import { TTSEngine } from '../backend/TTSEngine';
 import { ReminderEngine } from '../backend/ReminderEngine';
 import { MemoryEngine } from '../backend/MemoryEngine';
+import { geminiAI } from '../services/geminiAI';
 
 interface ManagementPageProps {
   medications: Medication[];
@@ -33,7 +33,6 @@ const ManagementPage: React.FC<ManagementPageProps> = ({
   const [editProfileData, setEditProfileData] = useState<PatientProfile | null>(null);
   const [isTestingSpeech, setIsTestingSpeech] = useState(false);
 
-  const ttsEngine = new TTSEngine();
   const reminderEngine = new ReminderEngine();
   const memoryEngine = new MemoryEngine();
 
@@ -41,7 +40,10 @@ const ManagementPage: React.FC<ManagementPageProps> = ({
     setIsTestingSpeech(true);
     const reminderMessage = `It's time for your ${medication.name}${medication.dosage ? `. Please take ${medication.dosage}` : ''}${medication.notes ? `. Remember: ${medication.notes}` : ''}. Please take your medication now.`;
     
-    ttsEngine.speak(reminderMessage, () => {
+    geminiAI.speak(reminderMessage).then(() => {
+      setIsTestingSpeech(false);
+    }).catch((error) => {
+      console.error('Speech test error:', error);
       setIsTestingSpeech(false);
     });
   };
@@ -49,16 +51,28 @@ const ManagementPage: React.FC<ManagementPageProps> = ({
   const testMemoryPrompt = () => {
     if (patientProfile && memoryPrompts.length > 0) {
       setIsTestingSpeech(true);
-      const prompt = memoryEngine.generateMemoryPrompt(patientProfile, memoryPrompts);
       
-      ttsEngine.speak(prompt, () => {
+      // Use Gemini AI to generate a more personalized memory prompt
+      geminiAI.generateMemoryPrompt(patientProfile).then((prompt) => {
+        return geminiAI.speak(prompt);
+      }).then(() => {
         setIsTestingSpeech(false);
+      }).catch((error) => {
+        console.error('Memory prompt test error:', error);
+        // Fallback to local memory engine
+        const fallbackPrompt = memoryEngine.generateMemoryPrompt(patientProfile, memoryPrompts);
+        geminiAI.speak(fallbackPrompt).finally(() => {
+          setIsTestingSpeech(false);
+        });
       });
     } else {
       setIsTestingSpeech(true);
       const fallbackPrompt = "Hello! I'm here to help you today. How are you feeling?";
       
-      ttsEngine.speak(fallbackPrompt, () => {
+      geminiAI.speak(fallbackPrompt).then(() => {
+        setIsTestingSpeech(false);
+      }).catch((error) => {
+        console.error('Speech test error:', error);
         setIsTestingSpeech(false);
       });
     }
@@ -68,7 +82,10 @@ const ManagementPage: React.FC<ManagementPageProps> = ({
     setIsTestingSpeech(true);
     const wellnessMessage = memoryEngine.generateWellnessCheck();
     
-    ttsEngine.speak(wellnessMessage, () => {
+    geminiAI.speak(wellnessMessage).then(() => {
+      setIsTestingSpeech(false);
+    }).catch((error) => {
+      console.error('Wellness check test error:', error);
       setIsTestingSpeech(false);
     });
   };
@@ -77,7 +94,10 @@ const ManagementPage: React.FC<ManagementPageProps> = ({
     setIsTestingSpeech(true);
     const encouragementMessage = memoryEngine.generateEncouragement();
     
-    ttsEngine.speak(encouragementMessage, () => {
+    geminiAI.speak(encouragementMessage).then(() => {
+      setIsTestingSpeech(false);
+    }).catch((error) => {
+      console.error('Encouragement test error:', error);
       setIsTestingSpeech(false);
     });
   };

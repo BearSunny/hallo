@@ -8,11 +8,11 @@ import Dashboard from './pages/Dashboard';
 import ManagementPage from './pages/ManagementPage';
 import { Medication, PatientProfile, MemoryPrompt } from './types';
 import { ReminderEngine } from './backend/ReminderEngine';
-import { TTSEngine } from './backend/TTSEngine';
 import { DatabaseService } from './backend/DatabaseService';
 import { MemoryEngine } from './backend/MemoryEngine';
 import LoginPage from './pages/LoginPage';
-import { getGPTResponse } from './backend/gptService';
+import { geminiAI } from './services/geminiAI';
+import { conversationAPI } from './services/api';
 
 type Page = 'login' | 'main' | 'caregiver' | 'add-medication' | 'dashboard' | 'manage';
 
@@ -31,7 +31,6 @@ function App() {
   const [isProcessingVoice, setIsProcessingVoice] = useState(false);
 
   const reminderEngine = new ReminderEngine();
-  const ttsEngine = new TTSEngine();
   const memoryEngine = new MemoryEngine();
 
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(!!dbService.getCurrentUser());
@@ -39,7 +38,7 @@ function App() {
   useEffect(() => {
     if (currentPage === 'main') {
       // Load data from localStorage on startup
-      loadData();
+      loadDataAsync();
       
       // Start reminder checking every 30 seconds for more reliable medication reminders
       const reminderInterval = setInterval(checkReminders, 30000); // Check every 30 seconds
@@ -85,14 +84,20 @@ function App() {
     return () => clearTimeout(midnightTimer);
   }, []);
   
-  const loadData = () => {
-    const savedMeds = dbService.getMedications();
-    const savedProfile = dbService.getPatientProfile();
-    const savedMemories = dbService.getMemoryPrompts();
-    
-    setMedications(savedMeds);
-    setPatientProfile(savedProfile);
-    setMemoryPrompts(savedMemories);
+  const loadDataAsync = async () => {
+    try {
+      const [savedMeds, savedProfile, savedMemories] = await Promise.all([
+        dbService.getMedications(),
+        dbService.getPatientProfile(),
+        dbService.getMemoryPrompts()
+      ]);
+      
+      setMedications(savedMeds);
+      setPatientProfile(savedProfile);
+      setMemoryPrompts(savedMemories);
+    } catch (error) {
+      console.error('Failed to load data:', error);
+    }
   };
 
   const checkReminders = () => {
@@ -142,8 +147,11 @@ function App() {
     
     // Add a small delay to ensure the UI updates before starting speech
     setTimeout(() => {
-      ttsEngine.speak(message, () => {
+      geminiAI.speak(message).then(() => {
         console.log('✅ Finished speaking');
+        setIsAvatarSpeaking(false);
+      }).catch((error) => {
+        console.error('❌ Speech error:', error);
         setIsAvatarSpeaking(false);
       });
     }, 100);
@@ -161,7 +169,20 @@ function App() {
     setCurrentMessage(`I heard you say: "${transcript}"`);
 
     try {
-      const reply = await getGPTResponse(transcript);
+      // Use Gemini AI for more contextual responses
+      const reply = await geminiAI.generateResponse(transcript, {
+        patientProfile,
+        medications,
+        conversationHistory: [] // Could be expanded to include recent conversations
+      });
+      
+      // Also log the conversation to the backend
+      try {
+        await conversationAPI.sendMessage(transcript, 'general');
+      } catch (logError) {
+        console.warn('Failed to log conversation:', logError);
+      }
+      
       speakMessage(reply);
     } catch (err) {
       console.error('❌ GPT failed:', err);
@@ -182,55 +203,75 @@ function App() {
   };
 
   const addMedication = (medication: Medication) => {
-    const newMedication = { ...medication, id: Date.now().toString() };
-    const updatedMeds = [...medications, newMedication];
-    setMedications(updatedMeds);
-    dbService.saveMedications(updatedMeds);
-    
-    console.log('➕ Added medication:', newMedication);
-    
-    // Check if this medication should trigger immediately
-    setTimeout(checkReminders, 1000);
+    dbService.addMedication(medication).then((newMedication) => {
+      if (newMedication) {
+        const updatedMeds = [...medications, newMedication];
+        setMedications(updatedMeds);
+        console.log('➕ Added medication:', newMedication);
+        
+        // Check if this medication should trigger immediately
+        setTimeout(checkReminders, 1000);
+      }
+    }).catch((error) => {
+      console.error('Failed to add medication:', error);
+    });
   };
 
   const updateMedication = (id: string, medication: Medication) => {
-    const updatedMeds = medications.map(med => med.id === id ? medication : med);
-    setMedications(updatedMeds);
-    dbService.saveMedications(updatedMeds);
-    
-    console.log('✏️ Updated medication:', medication);
+    dbService.updateMedication(id, medication).then((success) => {
+      if (success) {
+        const updatedMeds = medications.map(med => med.id === id ? medication : med);
+        setMedications(updatedMeds);
+        console.log('✏️ Updated medication:', medication);
+      }
+    }).catch((error) => {
+      console.error('Failed to update medication:', error);
+    });
   };
 
   const deleteMedication = (id: string) => {
-    const updatedMeds = medications.filter(med => med.id !== id);
-    setMedications(updatedMeds);
-    dbService.saveMedications(updatedMeds);
-    
-    console.log('🗑️ Deleted medication with id:', id);
+    dbService.deleteMedication(id).then((success) => {
+      if (success) {
+        const updatedMeds = medications.filter(med => med.id !== id);
+        setMedications(updatedMeds);
+        console.log('🗑️ Deleted medication with id:', id);
+      }
+    }).catch((error) => {
+      console.error('Failed to delete medication:', error);
+    });
   };
 
   const updatePatientProfile = (profile: PatientProfile) => {
     setPatientProfile(profile);
-    dbService.savePatientProfile(profile);
+    dbService.savePatientProfile(profile).catch((error) => {
+      console.error('Failed to save patient profile:', error);
+    });
     
     console.log('👤 Updated patient profile:', profile);
   };
 
   const addMemoryPrompt = (memory: MemoryPrompt) => {
-    const newMemory = { ...memory, id: Date.now().toString() };
-    const updatedMemories = [...memoryPrompts, newMemory];
-    setMemoryPrompts(updatedMemories);
-    dbService.saveMemoryPrompts(updatedMemories);
-    
-    console.log('💭 Added memory prompt:', newMemory);
+    dbService.addMemoryPrompt(memory).then((newMemory) => {
+      if (newMemory) {
+        const updatedMemories = [...memoryPrompts, newMemory];
+        setMemoryPrompts(updatedMemories);
+        console.log('💭 Added memory prompt:', newMemory);
+      }
+    }).catch((error) => {
+      console.error('Failed to add memory prompt:', error);
+    });
   };
 
   const deleteMemoryPrompt = (id: string) => {
-    const updatedMemories = memoryPrompts.filter(memory => memory.id !== id);
-    setMemoryPrompts(updatedMemories);
-    dbService.saveMemoryPrompts(updatedMemories);
-    
-    console.log('🗑️ Deleted memory prompt with id:', id);
+    dbService.deleteMemoryPrompt(id).then((success) => {
+      if (success) {
+        const updatedMemories = memoryPrompts.filter(memory => memory.id !== id);
+        setMemoryPrompts(updatedMemories);
+        console.log('🗑️ Deleted memory prompt with id:', id);
+      }
+    }).catch((error) => {
+      console.error('Failed to delete memory prompt:', error);
+    });
   };
 
   const renderCurrentPage = () => {
@@ -240,7 +281,7 @@ function App() {
           <LoginPage
             onLoginSuccess={() => {
               setCurrentPage('main');
-              loadData();
+              loadDataAsync();
             }}
           />
         );
