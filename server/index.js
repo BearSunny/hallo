@@ -7,9 +7,12 @@ require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+const FRONTEND_ORIGIN = 'https://hallo-4na8.vercel.app/';
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: FRONTEND_ORIGIN,
+}));
 app.use(express.json());
 
 // MongoDB Connection (placeholder - will be configured with real credentials)
