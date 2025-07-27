@@ -12,6 +12,7 @@ const FRONTEND_ORIGIN = 'https://hallo-4na8.vercel.app/';
 // Middleware
 app.use(cors({
   origin: FRONTEND_ORIGIN,
+  credentials:true
 }));
 app.use(express.json());
 
