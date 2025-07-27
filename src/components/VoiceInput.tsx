@@ -28,17 +28,19 @@ const VoiceInput: React.FC<VoiceInputProps> = ({
   const animationFrameRef = useRef<number>();
   const stopListeningRef = useRef<(() => void) | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  const transcriptRef = useRef<string>(''); // Add ref to track latest transcript
 
   useEffect(() => {
-    // Check if Gemini STT is available (this would be implemented when API key is available)
-    setIsUsingGeminiSTT(true); // Set to true when Gemini STT is implemented
+    setIsUsingGeminiSTT(true); 
 
     return () => {
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
       }
-      if (audioContextRef.current) {
-        audioContextRef.current.close();
+      if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+        audioContextRef.current.close().catch(error => {
+          console.warn('AudioContext already closed:', error);
+        });
       }
     };
   }, [isListening]);
@@ -57,8 +59,14 @@ const VoiceInput: React.FC<VoiceInputProps> = ({
 
       mediaRecorderRef.current.onstop = () => {
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
-        if (transcript.trim()) {
-          onVoiceInput(transcript.trim(), audioBlob);
+        const finalTranscript = transcriptRef.current.trim();
+        console.log(`🎤 Recording stopped. Transcript ref contains: "${transcriptRef.current}"`);
+        console.log(`🎤 Final transcript after trim: "${finalTranscript}"`);
+        if (finalTranscript) {
+          console.log(`✅ Sending voice input: "${finalTranscript}"`);
+          onVoiceInput(finalTranscript, audioBlob);
+        } else {
+          console.log(`⚠️ No transcript to send - transcript ref was empty`);
         }
         stream.getTracks().forEach(track => track.stop());
       };
@@ -74,13 +82,21 @@ const VoiceInput: React.FC<VoiceInputProps> = ({
       mediaRecorderRef.current.start();
       setIsRecording(true);
       setTranscript('');
+      transcriptRef.current = ''; // Reset ref as well
       
       // Start speech recognition using Gemini AI service
       if (isUsingGeminiSTT) {
         // Use Gemini STT when available
         stopListeningRef.current = geminiAI.startListening(
           (transcript, isFinal) => {
+            console.log(`🎤 STT Result: "${transcript}" (final: ${isFinal})`);
             if (isFinal) {
+              console.log(`📝 Final transcript captured: "${transcript}"`);
+              transcriptRef.current = transcript;
+              setTranscript(transcript);
+            } else {
+              console.log(`💬 Interim transcript: "${transcript}"`);
+              // Show interim results but don't commit to ref yet
               setTranscript(transcript);
             }
           },
@@ -115,16 +131,24 @@ const VoiceInput: React.FC<VoiceInputProps> = ({
 
       recognition.onresult = (event) => {
         let finalTranscript = '';
+        let interimTranscript = '';
 
         for (let i = event.resultIndex; i < event.results.length; i++) {
           const transcript = event.results[i][0].transcript;
           if (event.results[i].isFinal) {
             finalTranscript += transcript;
+          } else {
+            interimTranscript += transcript;
           }
         }
 
+        // Update both ref and state for consistency
         if (finalTranscript) {
+          transcriptRef.current = finalTranscript;
           setTranscript(finalTranscript);
+        } else if (interimTranscript) {
+          // Show interim results but don't commit to ref yet
+          setTranscript(interimTranscript);
         }
       };
 

@@ -41,8 +41,20 @@ export class DatabaseService {
 
   // Medication methods
   async saveMedications(medications: Medication[]): Promise<void> {
-    // This method is kept for compatibility but individual operations are preferred
-    console.warn('saveMedications is deprecated. Use individual create/update operations.');
+    try {
+      console.log('💾 Saving medications with reminder timestamps to MongoDB');
+      
+      // Update each medication individually to preserve reminder timestamps
+      const updatePromises = medications.map(medication => 
+        this.updateMedication(medication.id, medication)
+      );
+      
+      await Promise.all(updatePromises);
+      console.log('✅ Successfully saved all medication updates to MongoDB');
+    } catch (error) {
+      console.error('❌ Failed to save medications to MongoDB:', error);
+      throw error;
+    }
   }
 
   async getMedications(): Promise<Medication[]> {

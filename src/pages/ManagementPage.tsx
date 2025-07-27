@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Edit2, Trash2, Clock, Pill, User, Heart, Save, X, Volume2, Play } from 'lucide-react';
 import { Medication, PatientProfile, MemoryPrompt } from '../types';
 import { ReminderEngine } from '../backend/ReminderEngine';
@@ -36,9 +36,16 @@ const ManagementPage: React.FC<ManagementPageProps> = ({
   const reminderEngine = new ReminderEngine();
   const memoryEngine = new MemoryEngine();
 
+  // Initialize the reminder engine with current medications
+  useEffect(() => {
+    reminderEngine.setMedications(medications);
+  }, [medications, reminderEngine]);
+
   const testMedicationReminder = (medication: Medication) => {
     setIsTestingSpeech(true);
-    const reminderMessage = `It's time for your ${medication.name}${medication.dosage ? `. Please take ${medication.dosage}` : ''}${medication.notes ? `. Remember: ${medication.notes}` : ''}. Please take your medication now.`;
+    
+    // Use ReminderEngine to generate the reminder message
+    const reminderMessage = reminderEngine.generateMedicationReminder(medication);
     
     geminiAI.speak(reminderMessage).then(() => {
       setIsTestingSpeech(false);
@@ -98,6 +105,29 @@ const ManagementPage: React.FC<ManagementPageProps> = ({
       setIsTestingSpeech(false);
     }).catch((error) => {
       console.error('Encouragement test error:', error);
+      setIsTestingSpeech(false);
+    });
+  };
+
+  const testUpcomingReminders = () => {
+    setIsTestingSpeech(true);
+    
+    // Use ReminderEngine to get upcoming reminders
+    const upcomingReminders = reminderEngine.getUpcomingReminders();
+    let reminderMessage = "Here are your upcoming medication reminders: ";
+    
+    if (upcomingReminders.length > 0) {
+      reminderMessage += upcomingReminders.map(reminder => 
+        `${reminder.name} at ${reminder.time}`
+      ).join(', ');
+    } else {
+      reminderMessage = "You have no upcoming medication reminders for today.";
+    }
+    
+    geminiAI.speak(reminderMessage).then(() => {
+      setIsTestingSpeech(false);
+    }).catch((error) => {
+      console.error('Upcoming reminders test error:', error);
       setIsTestingSpeech(false);
     });
   };
@@ -182,7 +212,7 @@ const ManagementPage: React.FC<ManagementPageProps> = ({
             <Volume2 size={28} className="mr-3" />
             Voice Feature Testing
           </h2>
-          <div className="grid md:grid-cols-4 gap-4">
+          <div className="grid md:grid-cols-2 lg:grid-cols-5 gap-4">
             <button
               onClick={testMemoryPrompt}
               disabled={isTestingSpeech}
@@ -206,6 +236,14 @@ const ManagementPage: React.FC<ManagementPageProps> = ({
             >
               <Heart size={20} className="mr-2" />
               Test Encouragement
+            </button>
+            <button
+              onClick={testUpcomingReminders}
+              disabled={isTestingSpeech}
+              className="bg-white/20 hover:bg-white/30 disabled:bg-white/10 text-white p-4 rounded-xl transition-all duration-200 flex items-center justify-center"
+            >
+              <Clock size={20} className="mr-2" />
+              Test Upcoming Reminders
             </button>
             <div className="bg-white/20 rounded-xl p-4 flex items-center justify-center">
               <span className={`text-sm ${isTestingSpeech ? 'animate-pulse' : ''}`}>

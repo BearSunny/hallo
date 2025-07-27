@@ -41,13 +41,20 @@ function App() {
       loadDataAsync();
       
       // Start reminder checking every 30 seconds for more reliable medication reminders
-      const reminderInterval = setInterval(checkReminders, 30000); // Check every 30 seconds
+      const reminderInterval = setInterval(() => {
+        // Use a function to ensure we get the latest medications state
+        console.log('⏰ Timer-based reminder check triggered');
+        checkReminders();
+      }, 30000); // Check every 30 seconds
       
       // Start memory prompts every 5 minutes
       const memoryInterval = setInterval(triggerMemoryPrompt, 300000); // Every 5 minutes
       
       // Initial check after 5 seconds to catch any immediate reminders
-      const initialCheck = setTimeout(checkReminders, 5000);
+      const initialCheck = setTimeout(() => {
+        console.log('🚀 Initial reminder check triggered');
+        checkReminders();
+      }, 5000);
       
       return () => {
         clearInterval(reminderInterval);
@@ -58,13 +65,17 @@ function App() {
   }, []);
 
   // Re-run reminder checks when medications change
-  //useEffect(() => {
-    //if (medications.length > 0) {
+  useEffect(() => {
+    if (medications.length > 0) {
+      console.log(`🔄 Medications changed, triggering reminder check. Count: ${medications.length}`);
       // Check immediately when medications are updated
-      //const timeoutId = setTimeout(checkReminders, 1000);
-      //return () => clearTimeout(timeoutId);
-    //}
-  //}, [medications]);
+      const timeoutId = setTimeout(() => {
+        console.log('💊 Medication-triggered reminder check');
+        checkReminders();
+      }, 1000);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [medications]);
 
   useEffect(() => {
     // Reset reminder tracking at midnight
@@ -86,17 +97,26 @@ function App() {
   
   const loadDataAsync = async () => {
     try {
+      console.log('🔄 Loading data from database...');
       const [savedMeds, savedProfile, savedMemories] = await Promise.all([
         dbService.getMedications(),
         dbService.getPatientProfile(),
         dbService.getMemoryPrompts()
       ]);
       
+      console.log('📊 Data loaded from database:', {
+        medicationsCount: savedMeds.length,
+        medications: savedMeds,
+        hasProfile: !!savedProfile,
+        memoriesCount: savedMemories.length
+      });
+      
       setMedications(savedMeds);
       setPatientProfile(savedProfile);
       setMemoryPrompts(savedMemories);
     } catch (error) {
-      console.error('Failed to load data:', error);
+      console.error('❌ Failed to load data:', error);
+      // Don't clear existing data on error
     }
   };
 
@@ -106,30 +126,56 @@ function App() {
     
     console.log(`🕐 Checking reminders at ${currentTime}`, { 
       medicationsCount: medications.length,
-      medications: medications.map(m => ({ name: m.name, time: m.time }))
+      medications: medications.map(m => ({ name: m.name, time: m.time, lastRemindedAt: (m as any).lastRemindedAt }))
     });
     
-    const updatedMeds = medications.map((med) => {
-      const isDue = reminderEngine.isMedicationDueSoon(med, 1); // within 1-minute window
-      const alreadyReminded = med.lastRemindedAt === currentTime;
+    // Ensure ReminderEngine has the latest medications
+    reminderEngine.setMedications(medications);
+    
+    // Check for medications that are due now using the ReminderEngine
+    const dueNow = reminderEngine.checkAllRemindersNow();
+    
+    if (dueNow.length > 0) {
+      let hasUpdates = false;
+      const updatedMeds = medications.map((med) => {
+        const isDue = dueNow.some(dueMed => dueMed.id === med.id);
+        const alreadyReminded = (med as any).lastRemindedAt === currentTime;
 
-      if (isDue && !alreadyReminded) { // med is due and not reminded 
-        const reminder = reminderEngine.generateMedicationReminder(med);
-        console.log(`💊 Medication reminder triggered for "${med.name}"`);
-        speakMessage(reminder);
+        if (isDue && !alreadyReminded) {
+          const reminder = reminderEngine.generateMedicationReminder(med);
+          console.log(`💊 Medication reminder triggered for "${med.name}" at ${currentTime}`);
+          speakMessage(reminder);
+          hasUpdates = true;
 
-        return {
-          ...med,
-          lastRemindedAt: currentTime
-        };
+          return {
+            ...med,
+            lastRemindedAt: currentTime
+          } as any;
+        }
+
+        return med;
+      });
+
+      // Save updated state with reminder timestamps only if there were changes
+      if (hasUpdates) {
+        console.log('💾 Saving updated medication reminders to database');
+        
+        // Update local state immediately for UI responsiveness
+        setMedications(updatedMeds);
+        
+        // Save to MongoDB asynchronously
+        dbService.saveMedications(updatedMeds)
+          .then(() => {
+            console.log('✅ Medication reminder timestamps saved to MongoDB successfully');
+          })
+          .catch(error => {
+            console.error('❌ Failed to save medication updates to MongoDB:', error);
+            console.warn('⚠️ Continuing with local state - reminder timestamps may not persist across sessions');
+            // Don't reload data automatically as it can reset current state
+            // The local state will remain consistent for this session
+          });
       }
-
-      return med;
-    });
-
-    // Save updated state with reminder timestamps
-    //setMedications(updatedMeds);
-    //dbService.saveMedications(updatedMeds);
+    }
   };
 
   const triggerMemoryPrompt = () => {

@@ -13,7 +13,7 @@ app.use(cors());
 app.use(express.json());
 
 // MongoDB Connection (placeholder - will be configured with real credentials)
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/hallo-app';
+const MONGODB_URI = process.env.MONGODB_URI;
 
 mongoose.connect(MONGODB_URI, {
   useNewUrlParser: true,

@@ -15,7 +15,8 @@ class GeminiAIService {
     }
 
     this.genAI = new GoogleGenerativeAI(apiKey);
-    this.model = this.genAI.getGenerativeModel({ model: 'gemini-pro' });
+    this.model = this.genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    console.log("✅ Gemini API Key set up successfully with gemini-1.5-flash model!")
   }
 
   async generateResponse(
@@ -86,37 +87,63 @@ ${context.medications.map(med => `- ${med.name} at ${med.time}${med.dosage ? ` (
 
   private getFallbackResponse(userInput: string, context: any): string {
     const lowerInput = userInput.toLowerCase();
-    
-    // Medication-related responses
-    if (lowerInput.includes('medication') || lowerInput.includes('medicine') || lowerInput.includes('pill')) {
-      return "I understand you're asking about your medication. It's important to take your medicines as prescribed. If you have questions, please speak with your caregiver.";
-    }
-    
-    // Pain or discomfort
-    if (lowerInput.includes('hurt') || lowerInput.includes('pain') || lowerInput.includes('sick')) {
-      return "I'm sorry you're not feeling well. Please let your caregiver know about any pain or discomfort you're experiencing.";
-    }
-    
-    // Family-related
-    if (lowerInput.includes('family') || lowerInput.includes('daughter') || lowerInput.includes('son') || lowerInput.includes('wife') || lowerInput.includes('husband')) {
-      const name = context.patientProfile?.name || 'there';
-      return `${name}, your family loves you very much. They care about you and want you to be comfortable and happy.`;
-    }
-    
-    // Confusion or memory
-    if (lowerInput.includes('confused') || lowerInput.includes('remember') || lowerInput.includes('forgot')) {
-      return "It's okay to feel confused sometimes. You're safe, and I'm here with you. Take a deep breath and know that you are cared for.";
-    }
-    
-    // Greetings
-    if (lowerInput.includes('hello') || lowerInput.includes('hi') || lowerInput.includes('good morning') || lowerInput.includes('good afternoon')) {
-      const name = context.patientProfile?.name || '';
-      return `Hello ${name}! It's wonderful to see you today. How are you feeling?`;
-    }
-    
-    // Default supportive response
     const name = context.patientProfile?.name || '';
-    return `I hear you, ${name}. I'm here to listen and help however I can. You're doing great, and you're not alone.`;
+    
+    // More specific medication-related responses
+    if (lowerInput.includes('medication') || lowerInput.includes('medicine') || lowerInput.includes('pill') || lowerInput.includes('take')) {
+      if (context.medications && context.medications.length > 0) {
+        const nextMed = context.medications[0]; // Could be improved to find next due medication
+        return `${name}, I see you have ${context.medications.length} medication${context.medications.length > 1 ? 's' : ''} scheduled. Your next one is ${nextMed.name} at ${nextMed.time}. It's important to take your medicines as prescribed.`;
+      }
+      return `${name}, I understand you're asking about medication. Please speak with your caregiver about your medication schedule.`;
+    }
+    
+    // Pain or discomfort - more empathetic
+    if (lowerInput.includes('hurt') || lowerInput.includes('pain') || lowerInput.includes('sick') || lowerInput.includes('feel bad')) {
+      return `${name}, I'm sorry you're not feeling well. Your comfort is important. Please let your caregiver know about any pain or discomfort you're experiencing so they can help you feel better.`;
+    }
+    
+    // Family-related - more personal
+    if (lowerInput.includes('family') || lowerInput.includes('daughter') || lowerInput.includes('son') || lowerInput.includes('wife') || lowerInput.includes('husband') || lowerInput.includes('children')) {
+      return `${name}, your family loves you very much. They care about you deeply and want you to be comfortable and happy. You mean the world to them.`;
+    }
+    
+    // Confusion or memory - more supportive
+    if (lowerInput.includes('confused') || lowerInput.includes('remember') || lowerInput.includes('forgot') || lowerInput.includes('lost') || lowerInput.includes('where am i')) {
+      return `${name}, it's completely okay to feel confused sometimes. You're safe and cared for. I'm here with you, and you're not alone. Take a deep breath - everything is going to be alright.`;
+    }
+    
+    // Time-related questions
+    if (lowerInput.includes('time') || lowerInput.includes('day') || lowerInput.includes('date')) {
+      const now = new Date();
+      const timeStr = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+      const dateStr = now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+      return `${name}, it's ${timeStr} on ${dateStr}. You're doing well today.`;
+    }
+    
+    // Greetings - more personalized
+    if (lowerInput.includes('hello') || lowerInput.includes('hi') || lowerInput.includes('good morning') || lowerInput.includes('good afternoon') || lowerInput.includes('good evening')) {
+      const hour = new Date().getHours();
+      let greeting = 'Hello';
+      if (hour < 12) greeting = 'Good morning';
+      else if (hour < 17) greeting = 'Good afternoon';
+      else greeting = 'Good evening';
+      
+      return `${greeting} ${name}! It's wonderful to see you today. How are you feeling right now?`;
+    }
+    
+    // Questions about wellbeing
+    if (lowerInput.includes('how are you') || lowerInput.includes('feeling') || lowerInput.includes('okay') || lowerInput.includes('alright')) {
+      return `Thank you for asking, ${name}. I'm here and ready to help you. More importantly, how are you feeling today? Is there anything I can do to make you more comfortable?`;
+    }
+    
+    // Help requests
+    if (lowerInput.includes('help') || lowerInput.includes('need') || lowerInput.includes('want') || lowerInput.includes('can you')) {
+      return `${name}, I'm here to help you in any way I can. I can remind you about medications, chat with you, or help you feel more comfortable. What would you like me to help you with?`;
+    }
+    
+    // Default supportive response - more contextual
+    return `I hear what you're saying, ${name}. Thank you for sharing that with me. I'm here to listen and support you. Is there anything specific I can help you with right now?`;
   }
 
   async generateMemoryPrompt(patientProfile: PatientProfile): Promise<string> {
