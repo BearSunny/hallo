@@ -31,7 +31,7 @@ const VoiceInput: React.FC<VoiceInputProps> = ({
 
   useEffect(() => {
     // Check if Gemini STT is available (this would be implemented when API key is available)
-    setIsUsingGeminiSTT(false); // Set to true when Gemini STT is implemented
+    setIsUsingGeminiSTT(true); // Set to true when Gemini STT is implemented
 
     return () => {
       if (animationFrameRef.current) {
