@@ -3,6 +3,7 @@
 ## Project Overview
 
 **Hallo** is an innovative AI-powered companion designed specifically for elderly patients with Alzheimer's disease and their caregivers. This application combines technology with compassionate care to provide 24/7 support, medication reminders, and emotional companionship.
+Try it out at: https://hallo-4na8.vercel.app/
 
 ## Technical Aspects
 
