@@ -63,12 +63,12 @@ export interface AnalyticsData {
 // Auth API
 export const authAPI = {
   login: async (username: string, password: string): Promise<AuthResponse> => {
-    const response = await api.post('/auth/login', { username, password });
+    const response = await api.post('/api/auth/login', { username, password });
     return response.data;
   },
 
   register: async (username: string, password: string): Promise<AuthResponse> => {
-    const response = await api.post('/auth/register', { username, password });
+    const response = await api.post('/api/auth/register', { username, password });
     return response.data;
   },
 };
@@ -77,7 +77,7 @@ export const authAPI = {
 export const profileAPI = {
   get: async (): Promise<PatientProfile | null> => {
     try {
-      const response = await api.get('/profile');
+      const response = await api.get('/api/profile');
       return response.data;
     } catch (error) {
       if (axios.isAxiosError(error) && error.response?.status === 404) {
@@ -88,7 +88,7 @@ export const profileAPI = {
   },
 
   save: async (profile: PatientProfile): Promise<PatientProfile> => {
-    const response = await api.post('/profile', profile);
+    const response = await api.post('/api/profile', profile);
     return response.data;
   },
 };
@@ -96,7 +96,7 @@ export const profileAPI = {
 // Medications API
 export const medicationsAPI = {
   getAll: async (): Promise<Medication[]> => {
-    const response = await api.get('/medications');
+    const response = await api.get('/api/medications');
     return response.data.map((med: any) => ({
       ...med,
       id: med._id, // Convert MongoDB _id to id
@@ -104,7 +104,7 @@ export const medicationsAPI = {
   },
 
   create: async (medication: Omit<Medication, 'id'>): Promise<Medication> => {
-    const response = await api.post('/medications', medication);
+    const response = await api.post('/api/medications', medication);
     return {
       ...response.data,
       id: response.data._id,
@@ -112,7 +112,7 @@ export const medicationsAPI = {
   },
 
   update: async (id: string, medication: Medication): Promise<Medication> => {
-    const response = await api.put(`/medications/${id}`, medication);
+    const response = await api.put(`/api/medications/${id}`, medication);
     return {
       ...response.data,
       id: response.data._id,
@@ -120,14 +120,14 @@ export const medicationsAPI = {
   },
 
   delete: async (id: string): Promise<void> => {
-    await api.delete(`/medications/${id}`);
+    await api.delete(`/api/medications/${id}`);
   },
 };
 
 // Memory Prompts API
 export const memoryPromptsAPI = {
   getAll: async (): Promise<MemoryPrompt[]> => {
-    const response = await api.get('/memory-prompts');
+    const response = await api.get('/api/memory-prompts');
     return response.data.map((prompt: any) => ({
       ...prompt,
       id: prompt._id,
@@ -135,7 +135,7 @@ export const memoryPromptsAPI = {
   },
 
   create: async (prompt: Omit<MemoryPrompt, 'id'>): Promise<MemoryPrompt> => {
-    const response = await api.post('/memory-prompts', prompt);
+    const response = await api.post('/api/memory-prompts', prompt);
     return {
       ...response.data,
       id: response.data._id,
@@ -143,14 +143,14 @@ export const memoryPromptsAPI = {
   },
 
   delete: async (id: string): Promise<void> => {
-    await api.delete(`/memory-prompts/${id}`);
+    await api.delete(`/api/memory-prompts/${id}`);
   },
 };
 
 // AI Conversation API
 export const conversationAPI = {
   sendMessage: async (message: string, context?: string): Promise<ConversationResponse> => {
-    const response = await api.post('/conversation', { message, context });
+    const response = await api.post('/api/conversation', { message, context });
     return response.data;
   },
 };
@@ -166,7 +166,7 @@ export const analyticsAPI = {
 // Health check
 export const healthAPI = {
   check: async (): Promise<{ status: string; timestamp: string; database: string }> => {
-    const response = await api.get('/health');
+    const response = await api.get('/api/health');
     return response.data;
   },
 };
